@@ -25,6 +25,15 @@ async function main(): Promise<void> {
     base: { service: SERVICE_NAME },
   });
 
+  process.on("unhandledRejection", (reason) => {
+    logger.error("unhandled promise rejection", { error: reason });
+    process.exitCode = 1;
+  });
+  process.on("uncaughtException", (error) => {
+    logger.error("uncaught exception", { error });
+    process.exit(1);
+  });
+
   let gateway;
   try {
     gateway = await createGateway({ config, logger });

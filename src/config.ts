@@ -37,15 +37,20 @@ function numberFromEnv(options: {
 
 const optionalUrl = z
   .string()
+  .trim()
   .min(1)
   .refine((value) => {
     try {
-      new URL(value);
-      return true;
+      const parsed = new URL(value);
+      return (
+        (parsed.protocol === "https:" || parsed.protocol === "http:") &&
+        parsed.username === "" &&
+        parsed.password === ""
+      );
     } catch {
       return false;
     }
-  }, "must be a valid absolute URL");
+  }, "must be an absolute http(s) URL without credentials");
 
 const EnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("production"),
@@ -63,8 +68,8 @@ const EnvSchema = z.object({
     ),
   SESSION_VAULT_PASSPHRASE: z.string().min(12),
 
-  GOPAY_MERCHANT_ID: z.string().min(1),
-  GOPAY_STATIC_QRIS: z.string().min(10),
+  GOPAY_MERCHANT_ID: z.string().trim().min(1),
+  GOPAY_STATIC_QRIS: z.string().trim().min(10),
 
   INTERNAL_API_KEY: z.string().min(24),
 
