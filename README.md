@@ -51,6 +51,9 @@ npm run build
 node dist/index.js
 ```
 
+Startup validates the static QRIS checksum and fails fast if the placeholder
+from `.env.example` was not replaced.
+
 Health:
 
 ```sh

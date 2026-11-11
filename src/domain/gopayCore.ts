@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import {
   GopayProvider,
+  isValidQrisChecksum,
   type Payment,
   type SessionState,
   type PaymentService,
@@ -48,6 +49,11 @@ export class GopayPaymentsCore implements PaymentsCore, SessionGateway {
   private closed = false;
 
   constructor(private readonly options: GopayPaymentsCoreOptions) {
+    if (!isValidQrisChecksum(options.staticQris)) {
+      throw new Error(
+        "GOPAY_STATIC_QRIS is not a valid static QRIS payload (checksum failed)",
+      );
+    }
     this.session = options.initialSession;
     this.deviceId = options.initialSession?.deviceId ?? randomUUID();
     this.provider = this.buildProvider(options.initialSession);
