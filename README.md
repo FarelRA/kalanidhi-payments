@@ -421,7 +421,8 @@ sqlite3 /var/lib/kalanidhi/payments.sqlite \
 ## Security notes
 
 - **Network:** no public Traefik route. Bind to `127.0.0.1` or an internal
-  network. Compose exposes the port only on `kalanidhi-internal`.
+  network. Compose exposes the port only on `kalanidhi-internal`. The service
+  speaks plain HTTP; terminate TLS at the internal proxy.
 - **Secrets:** internal key, webhook secret, vault passphrase, and provider
   session are never written to the image or repository. `.env` is ignored and
   excluded from Docker context.

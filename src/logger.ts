@@ -30,7 +30,7 @@ export interface AppLogger {
 
 /** Keys that can carry credentials, PII, or QR payloads. */
 const SENSITIVE_KEY =
-  /pass(?:phrase|word)?|secret|token|otp|authorization|cookie|signature|qr(?:is|_?string|_?payload)?|api[-_]?key|internal[-_]?key|credential|body|payload/i;
+  /pass(?:phrase|word)?|secret|token|otp|authorization|cookie|signature|qr(?:is|_?string|_?payload)?|api[-_]?key|internal[-_]?key|credential|body|payload|phone|msisdn/i;
 
 const BEARER_PATTERN = /\b(bearer)\s+[A-Za-z0-9._~+/=-]+/gi;
 const ASSIGNMENT_PATTERN =
