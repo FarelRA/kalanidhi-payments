@@ -1,0 +1,52 @@
+# Local/dev compose file. One gateway instance, no public ports.
+# The service is reachable only by other containers on `kalanidhi-internal`.
+#
+#   cp .env.example .env   # fill in real values first
+#   docker compose up --build
+#
+# Do NOT add a `ports:` mapping. Do NOT scale this service horizontally: the
+# SQLite store and the single reconciler assume one writer.
+
+services:
+  payments:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: kalanidhi-payments:local
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      HOST: 0.0.0.0
+      STORE_PATH: /var/lib/kalanidhi/payments.sqlite
+    volumes:
+      - payments-data:/var/lib/kalanidhi
+    expose:
+      - "8080"
+    networks:
+      - internal
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:'+(process.env.PORT||8080)+'/v1/health',{headers:{'x-internal-key':process.env.INTERNAL_API_KEY||''}}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+
+volumes:
+  payments-data:
+    name: kalanidhi-payments-data
+
+networks:
+  internal:
+    name: kalanidhi-internal

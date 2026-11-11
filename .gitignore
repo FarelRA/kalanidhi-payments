@@ -1,0 +1,23 @@
+node_modules/
+dist/
+coverage/
+*.log
+
+# Runtime state: SQLite databases, WAL sidecars, lock files, session envelopes.
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.lock
+
+# Secrets and local environment.
+.env
+.env.*
+!.env.example
+
+# Editor / OS noise.
+.DS_Store
+.idea/
+.vscode/
+*.tsbuildinfo
