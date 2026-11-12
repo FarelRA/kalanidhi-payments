@@ -34,6 +34,8 @@ export interface WireWebhookEvent {
   providerTransactionId: string | null;
   amount: number;
   paidAt: string | null;
+  /** Provider fee in whole rupiah when the feed reports it. */
+  gatewayFee?: number;
 }
 
 export interface WebhookDeliverySummary {
@@ -56,6 +58,51 @@ export interface WebhookOutboxOptions {
 
 function iso(epochMs: number): string {
   return new Date(epochMs).toISOString();
+}
+
+const FEE_KEYS = [
+  "mdr",
+  "fee",
+  "merchant_fee",
+  "service_fee",
+  "admin_fee",
+  "total_fee",
+  "fee_amount",
+  "net_fee",
+  "deduction",
+  "biaya",
+] as const;
+
+function wholeRupiah(value: unknown, ceiling: number): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  const candidates = value > ceiling ? [Math.round(value / 100)] : [Math.round(value)];
+  return candidates.find(
+    (candidate) =>
+      Number.isInteger(candidate) && candidate > 0 && candidate <= ceiling,
+  );
+}
+
+/**
+ * Best-effort provider fee. GoBiz reports amounts in sen, so a raw fee larger
+ * than the payment is normalized once. When the feed exposes no fee, the
+ * webhook omits the field and the operator records the real MDR later.
+ */
+export function extractGatewayFee(payment: Payment): number | undefined {
+  const ceiling = payment.uniqueAmount;
+  const raw = payment.transaction?.raw;
+  if (raw && typeof raw === "object") {
+    for (const key of FEE_KEYS) {
+      const fee = wholeRupiah((raw as Record<string, unknown>)[key], ceiling);
+      if (fee !== undefined) return fee;
+    }
+  }
+  const real = payment.transaction?.realGrossAmount;
+  if (typeof real === "number" && real > 0 && real < ceiling) {
+    return ceiling - real;
+  }
+  return undefined;
 }
 
 function parseTransactionTime(payment: Payment): number | undefined {
@@ -127,6 +174,7 @@ export class WebhookOutbox {
       providerTransactionId: payment.transaction?.id ?? null,
       amount: payment.uniqueAmount,
       paidAt: iso(parseTransactionTime(payment) ?? paidAt),
+      gatewayFee: extractGatewayFee(payment),
     });
   }
 
