@@ -5,6 +5,7 @@ data
 test
 .git
 .gitignore
+.github
 .env
 .env.*
 !.env.example

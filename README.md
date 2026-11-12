@@ -449,6 +449,117 @@ sqlite3 /var/lib/kalanidhi/payments.sqlite \
 
 ## Deployment
 
+### Container image releases (CI)
+
+[`.github/workflows/docker-release.yml`](.github/workflows/docker-release.yml)
+builds, tests, and publishes the image on every push to `main`, on `v*` tag
+pushes, and on manual `workflow_dispatch`. Documentation-only changes
+(`**/*.md`, `docs/**`, `LICENSE`) are skipped on branch pushes; tag pushes
+always run.
+
+The workflow gates the image on the same commands used locally: `npm ci`,
+`npm run typecheck`, `npm run lint`, `npm run format:check`, `npm test`, and
+`npm run build`. A failing gate publishes nothing.
+
+| Tag           | When                          | Use                      |
+| ------------- | ----------------------------- | ------------------------ |
+| `latest`      | push to `main`, `v*` tag      | convenience, current tip |
+| `<short-sha>` | every successful workflow run | immutable deployment pin |
+
+Images are multi-arch OCI manifests for `linux/arm64` (Nodus) and
+`linux/amd64`. Both use the same pinned `node:24-alpine` base, lockfile, and
+vendored `merchantid` tarball. The build receives no secrets, build args, or
+`.env`; configuration is read from the runtime environment only.
+
+#### Pull on Nodus
+
+```sh
+# Deploy a specific build (recommended).
+podman pull ghcr.io/farelra/kalanidhi-payments:<short-sha>
+# Or track main.
+podman pull ghcr.io/farelra/kalanidhi-payments:latest
+```
+
+Run it with the environment and volume described below, for example:
+
+```sh
+podman run -d --name kalanidhi-payments \
+  --restart=unless-stopped \
+  --env-file /etc/kalanidhi/payments.env \
+  -e STORE_PATH=/var/lib/kalanidhi/payments.sqlite \
+  -v kalanidhi-payments-data:/var/lib/kalanidhi:Z \
+  --read-only --tmpfs /tmp \
+  -p 127.0.0.1:8080:8080 \
+  ghcr.io/farelra/kalanidhi-payments:<short-sha>
+```
+
+Keep the published port on the loopback or internal interface; the gateway is
+private and must not be exposed publicly.
+
+#### Private vs public GHCR package
+
+`ghcr.io/farelra/kalanidhi-payments` inherits the repository's visibility, so it
+starts **private** and an anonymous `podman pull` fails with `unauthorized`.
+
+Private (default), using a classic PAT with `read:packages` (add `repo` when the
+repository is private):
+
+```sh
+printf '%s' "$GHCR_TOKEN" | podman login ghcr.io -u <github-user> --password-stdin
+```
+
+Public: set the package visibility to public in GitHub → your profile →
+Packages → `kalanidhi-payments` → Package settings → Change visibility. Public
+pulls need no login.
+
+CI authenticates with the workflow's `GITHUB_TOKEN` (`packages: write`); no
+long-lived registry secret is stored in the repository.
+
+### Self-hosted service contract
+
+The image is one headless process. The host supplies configuration and the
+SQLite volume; the image supplies nothing secret.
+
+| Contract       | Value                                                                                                                       |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| HTTP port      | `8080` (`EXPOSE 8080`; keep `PORT` in sync)                                                                                 |
+| Bind address   | `0.0.0.0` inside the container; publish only to loopback or the internal network                                            |
+| Database       | `STORE_PATH=/var/lib/kalanidhi/payments.sqlite`                                                                             |
+| Volume         | local filesystem mounted at `/var/lib/kalanidhi`; never NFS/SMB                                                             |
+| Writable paths | the data volume and `/tmp`; the root filesystem can be read-only                                                            |
+| User           | non-root `app` user baked into the image                                                                                    |
+| Health probe   | `GET /v1/health` with `x-internal-key: $INTERNAL_API_KEY`; returns `200` even when degraded, so alert on `session != valid` |
+
+`STORE_PATH` is the SQLite file; its parent directories are created on boot. The
+`.env.example` default (`./data/...`) is meant for bare Node, so set it
+explicitly when running the image.
+
+Required environment (no defaults; startup fails fast):
+
+| Variable                   | Purpose                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `SESSION_VAULT_PASSPHRASE` | AES-256-GCM key material for the session vault (≥ 12 chars); keep it out of the volume and image. |
+| `GOPAY_MERCHANT_ID`        | GoBiz merchant id.                                                                                |
+| `GOPAY_STATIC_QRIS`        | Static merchant QRIS payload, checksum-validated at boot.                                         |
+| `INTERNAL_API_KEY`         | `x-internal-key` shared secret (≥ 24 chars).                                                      |
+| `WEBHOOK_URL`              | HTTPS receiver for signed webhooks.                                                               |
+| `WEBHOOK_SECRET`           | HMAC secret for webhook signatures (≥ 16 bytes).                                                  |
+
+Tunable with production-safe defaults: `NODE_ENV` (`production`), `HOST`
+(`127.0.0.1`; the image sets `0.0.0.0`), `PORT` (`8080`), `LOG_LEVEL` (`info`),
+`STORE_PATH`, `WEBHOOK_ALLOW_HTTP` (`false`), `WEBHOOK_ALLOW_PRIVATE_NETWORKS`
+(`false`), `WEBHOOK_TIMEOUT_MS`, `WEBHOOK_MAX_ATTEMPTS`,
+`WEBHOOK_BASE_DELAY_MS`, `WEBHOOK_MAX_DELAY_MS`, `RECONCILE_INTERVAL_MS`,
+`RECONCILE_JITTER_RATIO`, `CLOCK_SKEW_MS`, `DEFAULT_EXPIRY_SECONDS`, and
+`MAX_UNIQUE_OFFSET`. See [`.env.example`](.env.example) for the annotated list.
+
+Rules the image cannot enforce:
+
+- run exactly one container — no replicas and no rolling overlap;
+- back up `payments.sqlite` (and `-wal`/`-shm` while running);
+- alert on `session != valid` and reconnect with OTP;
+- never bake `.env`, keys, or session material into an image layer.
+
 ### Docker (recommended)
 
 ```sh
