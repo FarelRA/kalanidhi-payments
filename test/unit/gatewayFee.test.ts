@@ -49,6 +49,8 @@ describe("gateway fee extraction", () => {
   });
 
   it("rejects a fee larger than the payment", () => {
-    expect(extractGatewayFee(payment({ raw: { fee: 9_999_999 } }))).toBeUndefined();
+    expect(
+      extractGatewayFee(payment({ raw: { fee: 9_999_999 } })),
+    ).toBeUndefined();
   });
 });

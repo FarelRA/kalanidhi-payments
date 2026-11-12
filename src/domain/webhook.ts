@@ -77,7 +77,8 @@ function wholeRupiah(value: unknown, ceiling: number): number | undefined {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return undefined;
   }
-  const candidates = value > ceiling ? [Math.round(value / 100)] : [Math.round(value)];
+  const candidates =
+    value > ceiling ? [Math.round(value / 100)] : [Math.round(value)];
   return candidates.find(
     (candidate) =>
       Number.isInteger(candidate) && candidate > 0 && candidate <= ceiling,
