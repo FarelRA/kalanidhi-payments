@@ -153,7 +153,25 @@ export class GopayPaymentsCore implements PaymentsCore, SessionGateway {
     return this.payments().cancelPayment(id);
   }
 
-  tick(): Promise<{ paid: Payment[]; expired: Payment[] }> {
+  /**
+   * Refresh the fallback expiry proactively. GoPay access tokens are JWEs whose
+   * `exp` cannot be read, so the library uses a conservative 30-minute fallback.
+   * Without a pending charge the feed is never called, so the session would
+   * otherwise look expired even while the refresh token is still usable.
+   */
+  private async refreshIfNeeded(): Promise<void> {
+    const expiresAt = this.session?.tokens.expiresAt;
+    if (!expiresAt || expiresAt > Date.now() + 5 * 60_000) return;
+    try {
+      await this.provider.refreshSession();
+    } catch {
+      // Leave the session untouched; the next feed call surfaces the real
+      // auth failure and the operator reconnects with OTP.
+    }
+  }
+
+  async tick(): Promise<{ paid: Payment[]; expired: Payment[] }> {
+    await this.refreshIfNeeded();
     return this.payments().tick();
   }
 
